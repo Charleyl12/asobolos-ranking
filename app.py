@@ -521,6 +521,31 @@ def player_history(df: pd.DataFrame, player_id: int) -> pd.DataFrame:
     return hist.sort_values(["year", "month_order"]).reset_index(drop=True)
 
 
+
+def admin_login_box() -> bool:
+    with st.sidebar:
+        st.markdown("## 🔐 Acceso administrador")
+        st.markdown('<div class="muted">La vista pública queda abierta para consulta.</div>', unsafe_allow_html=True)
+
+        if st.session_state.get("is_admin", False):
+            st.success("Sesión admin activa")
+            if st.button("Cerrar sesión admin", key="admin_logout_btn"):
+                st.session_state["is_admin"] = False
+                st.session_state["dashboard_target_page"] = "Vista pública"
+                st.rerun()
+            return True
+
+        password = st.text_input("Clave admin", type="password", key="admin_password_input")
+        if st.button("Ingresar como admin", key="admin_login_btn"):
+            if password == st.secrets.get("ADMIN_PASSWORD", ""):
+                st.session_state["is_admin"] = True
+                st.session_state["dashboard_target_page"] = "Dashboard"
+                st.rerun()
+            else:
+                st.error("Clave incorrecta.")
+        return False
+
+
 def sidebar_admin() -> None:
     with st.sidebar:
         st.markdown("## 🎳 Asobolos Pro")
@@ -1412,66 +1437,81 @@ def page_public_view(results_df: pd.DataFrame, players_df: pd.DataFrame) -> None
         """
         <div class="hero">
             <div class="badge">Consulta pública</div>
-            <h1 style="margin:.5rem 0 0 0;">Asobolos Pichincha - Vista pública</h1>
-            <div class="muted">Consulta rankings, acumulados y fichas de jugadores sin entrar al flujo administrativo.</div>
+            <h1 style="margin:.5rem 0 0 0;">Asobolos Pichincha</h1>
+            <div class="muted">Consulta el ranking general y la ficha deportiva de cada jugador.</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    tabs = st.tabs(["Ranking público", "Ficha pública"])
-    with tabs[0]:
-        if results_df.empty:
-            st.info("No hay resultados cargados todavía.")
-        else:
-            year = st.selectbox("Año", sorted(results_df["year"].unique()), index=len(sorted(results_df["year"].unique())) - 1, key="public_year")
+    if results_df.empty:
+        st.info("No hay resultados cargados todavía.")
+    else:
+        st.markdown("## Ranking general")
+        c1, c2, c3 = st.columns([1, 1, 1.2])
+        with c1:
+            year = st.selectbox(
+                "Temporada",
+                sorted(results_df["year"].unique()),
+                index=len(sorted(results_df["year"].unique())) - 1,
+                key="public_year",
+            )
+        with c2:
             sexo = st.selectbox("Sección", GENDER_OPTIONS, key="public_gender")
-            ranking_mode = st.selectbox("Modo", ["Oficial", "General"], index=1, key="public_mode")
-            ranking, total_months, required_months = build_season_ranking(results_df, int(year))
-            sec = ranking[ranking["sexo"] == sexo].copy()
-            sec = apply_eligibility_view(sec, ranking_mode, "Todos")
-            st.caption(f"Temporada {year} | Meses jugados: {total_months} | Mínimo de elegibilidad: {required_months}")
-            month_subset = results_df[(results_df["year"] == int(year)) & (results_df["sexo"] == sexo)].copy()
-            months_present = sorted(month_subset["month_code"].dropna().unique().tolist(), key=month_sort_key) if not month_subset.empty else []
-            month_pivot = pd.DataFrame()
-            if not month_subset.empty:
-                month_pivot = month_subset.pivot_table(
-                    index="jugador",
-                    columns="month_code",
-                    values="total_mes",
-                    aggfunc="max"
-                ).reset_index()
-                for m in months_present:
-                    if m not in month_pivot.columns:
-                        month_pivot[m] = None
-                month_pivot = month_pivot[["jugador", *months_present]]
+        with c3:
+            public_search = st.text_input("Buscar jugador o club", key="public_rank_search")
 
-            if ranking_mode == "Oficial":
-                show = sec[["ranking_oficial", "jugador", "club_actual", "promedio", "pines"]].copy()
-                show.columns = ["Ranking Oficial", "Jugador", "Club", "Promedio", "Total acumulado"]
-            else:
-                show = sec[["ranking_general", "jugador", "club_actual", "promedio", "pines"]].copy()
-                show.columns = ["Ranking General", "Jugador", "Club", "Promedio", "Total acumulado"]
+        ranking, total_months, _required_months = build_season_ranking(results_df, int(year))
+        sec = ranking[ranking["sexo"] == sexo].copy()
+        sec = apply_eligibility_view(sec, "General", "Todos")
 
-            if not month_pivot.empty:
-                month_pivot = month_pivot.rename(columns={"jugador": "Jugador", **{m: MONTH_LABELS.get(m, m) for m in months_present}})
-                # evitar columnas mensuales duplicadas si ya existen en la tabla base
-                month_cols_named = [MONTH_LABELS.get(m, m) for m in months_present]
-                show = show[[c for c in show.columns if c not in month_cols_named]].copy()
-                show = show.merge(month_pivot, on="Jugador", how="left")
-                ordered_months = [MONTH_LABELS.get(m, m) for m in months_present]
-                base_before = [c for c in show.columns if c not in ordered_months and c not in ["Total acumulado"]]
-                tail_cols = [c for c in ["Total acumulado"] if c in show.columns]
-                fixed_cols = base_before + ordered_months + tail_cols
-                fixed_cols = [c for c in fixed_cols if c in show.columns]
-                # deduplicar por si alguna columna se repitió por combinación previa
-                fixed_cols = list(dict.fromkeys(fixed_cols))
-                show = show.loc[:, ~show.columns.duplicated()]
-                show = show[fixed_cols]
+        st.caption(f"Temporada {year} | Meses jugados: {total_months}")
 
-            st.dataframe(show.loc[:, ~show.columns.duplicated()], use_container_width=True, hide_index=True)
-    with tabs[1]:
-        render_player_profile_content(results_df, players_df, public_mode=True)
+        month_subset = results_df[(results_df["year"] == int(year)) & (results_df["sexo"] == sexo)].copy()
+        months_present = sorted(month_subset["month_code"].dropna().unique().tolist(), key=month_sort_key) if not month_subset.empty else []
+        month_pivot = pd.DataFrame()
+
+        if not month_subset.empty:
+            month_pivot = month_subset.pivot_table(
+                index="jugador",
+                columns="month_code",
+                values="total_mes",
+                aggfunc="max",
+            ).reset_index()
+            for m in months_present:
+                if m not in month_pivot.columns:
+                    month_pivot[m] = None
+            month_pivot = month_pivot[["jugador", *months_present]]
+
+        show = sec[["ranking_general", "jugador", "club_actual", "promedio", "pines"]].copy()
+        show.columns = ["Ranking", "Jugador", "Club", "Promedio", "Total acumulado"]
+
+        if not month_pivot.empty:
+            month_pivot = month_pivot.rename(columns={"jugador": "Jugador", **{m: MONTH_LABELS.get(m, m) for m in months_present}})
+            month_cols_named = [MONTH_LABELS.get(m, m) for m in months_present]
+            show = show[[c for c in show.columns if c not in month_cols_named]].copy()
+            show = show.merge(month_pivot, on="Jugador", how="left")
+            ordered_months = [MONTH_LABELS.get(m, m) for m in months_present]
+            base_before = [c for c in show.columns if c not in ordered_months and c != "Total acumulado"]
+            tail_cols = [c for c in ["Total acumulado"] if c in show.columns]
+            fixed_cols = base_before + ordered_months + tail_cols
+            fixed_cols = [c for c in fixed_cols if c in show.columns]
+            fixed_cols = list(dict.fromkeys(fixed_cols))
+            show = show.loc[:, ~show.columns.duplicated()]
+            show = show[fixed_cols]
+
+        if public_search.strip():
+            search_text = public_search.strip()
+            mask = (
+                show["Jugador"].astype(str).str.contains(search_text, case=False, na=False)
+                | show["Club"].astype(str).str.contains(search_text, case=False, na=False)
+            )
+            show = show[mask].copy()
+
+        st.dataframe(show.loc[:, ~show.columns.duplicated()], use_container_width=True, hide_index=True)
+
+    st.markdown("## Ficha pública del jugador")
+    render_player_profile_content(results_df, players_df, public_mode=True)
 
 def page_player_profile(results_df: pd.DataFrame, players_df: pd.DataFrame) -> None:
     render_player_profile_content(results_df, players_df, public_mode=False)
@@ -1581,9 +1621,17 @@ def page_data(results_df: pd.DataFrame) -> None:
 def main() -> None:
     inject_theme()
     init_db()
-    sidebar_admin()
+
     players_df = load_players_df()
     results_df = load_results_df()
+
+    is_admin = admin_login_box()
+
+    if not is_admin:
+        page_public_view(results_df, players_df)
+        return
+
+    sidebar_admin()
 
     menu = [
         "Dashboard",

@@ -142,6 +142,50 @@ def inject_theme() -> None:
             color: var(--accent-2);
             border: 1px solid rgba(255,122,26,.18);
         }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+        }
+        .stat-card {
+            background: linear-gradient(180deg, #17171b 0%, #131318 100%);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: .85rem .9rem;
+            min-height: 88px;
+            box-shadow: 0 12px 30px rgba(0,0,0,.18);
+        }
+        .stat-label {
+            font-size: .78rem;
+            color: var(--muted);
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: .35rem;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+        .stat-value {
+            font-size: 1.7rem;
+            font-weight: 850;
+            line-height: 1.05;
+            color: var(--text);
+            overflow-wrap: anywhere;
+        }
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: .7rem;
+            }
+            .stat-card {
+                padding: .75rem;
+                min-height: 78px;
+            }
+            .stat-value {
+                font-size: 1.35rem;
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -170,6 +214,28 @@ def feature_card(title: str, desc: str, badge: str = "") -> None:
             <div style="height:.5rem"></div>
             <div style="font-size:1.1rem;font-weight:800;">{title}</div>
             <div class="card-sub">{desc}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+
+
+def stat_card_grid(stats: list[tuple[str, str | int | float]]) -> None:
+    cards = ""
+    for label, value in stats:
+        cards += f"""
+        <div class="stat-card">
+            <div class="stat-label">{label}</div>
+            <div class="stat-value">{value}</div>
+        </div>
+        """
+
+    st.markdown(
+        f"""
+        <div class="stats-grid">
+            {cards}
         </div>
         """,
         unsafe_allow_html=True,
@@ -1378,7 +1444,7 @@ def render_player_profile_content(results_df: pd.DataFrame, players_df: pd.DataF
     hist = player_history(results_df, player_id)
     summary = build_player_summary(prow, hist, results_df)
 
-    info_left, info_right = st.columns([0.9, 1.4])
+    info_left, info_right = st.columns([0.75, 1.65])
     with info_left:
         st.markdown("### Datos de ficha")
         st.write(f"**Nombre:** {prow['display_name']}")
@@ -1405,14 +1471,15 @@ def render_player_profile_content(results_df: pd.DataFrame, players_df: pd.DataF
         if hist.empty:
             st.info("Este jugador aún no tiene resultados.")
         else:
-            m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
-            m1.metric("Promedio general", f"{summary['promedio_general']:.2f}")
-            m2.metric("Mejor línea", summary["mejor_linea"])
-            m3.metric("Mejor serie 3", summary.get("mejor_serie_3", 0))
-            m4.metric("Mejor serie 6", summary.get("mejor_serie_6", 0))
-            m5.metric("Mejor mes", summary["mejor_mes"])
-            m6.metric("Meses jugados", summary["meses_jugados"])
-            m7.metric("Total acumulado", summary["total_acumulado"])
+            stat_card_grid([
+                ("Promedio general", f"{summary['promedio_general']:.2f}"),
+                ("Mejor línea", summary["mejor_linea"]),
+                ("Mejor serie 3", summary.get("mejor_serie_3", 0)),
+                ("Mejor serie 6", summary.get("mejor_serie_6", 0)),
+                ("Mejor mes", summary["mejor_mes"]),
+                ("Meses jugados", summary["meses_jugados"]),
+                ("Total acumulado", summary["total_acumulado"]),
+            ])
 
             tabs = st.tabs(["Evolución", "Totales por mes", "Historial completo"])
             with tabs[0]:

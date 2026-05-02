@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wake up Streamlit app
-        run: curl -L https://abpranking.streamlit.app/
+        run: curl -I https://abpranking.streamlit.app/

@@ -10,4 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wake up Streamlit app
-        run: curl -I https://abpranking.streamlit.app/
+        run: |
+          curl --max-time 60 --retry 3 --retry-delay 10 \
+          -A "Mozilla/5.0" \
+          https://abpranking.streamlit.app/ || true

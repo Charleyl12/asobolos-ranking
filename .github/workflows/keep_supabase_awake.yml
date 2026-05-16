@@ -9,8 +9,21 @@ jobs:
   ping_supabase:
     runs-on: ubuntu-latest
     steps:
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.SUPABASE_URL }}" ]; then
+            echo "SUPABASE_URL is missing"
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.SUPABASE_KEY }}" ]; then
+            echo "SUPABASE_KEY is missing"
+            exit 1
+          fi
+
       - name: Ping Supabase REST API
         run: |
-          curl -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/players?select=id&limit=1" \
-          -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"
+          curl --fail --show-error --silent \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/players?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"
